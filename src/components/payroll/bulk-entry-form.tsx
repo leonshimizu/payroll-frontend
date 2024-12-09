@@ -2,28 +2,18 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useCompanyStore } from '@/lib/store/company-store';
 import { usePayrollStore } from '@/lib/store/payroll-store';
-import { format } from 'date-fns';
-
-interface BulkEntryRow {
-  employeeId: number;
-  regularHours: string;
-  overtimeHours: string;
-  tips: string;
-}
+import api from '@/lib/api';
 
 export function BulkEntryForm() {
   const [payPeriodStart, setPayPeriodStart] = useState('');
   const [payPeriodEnd, setPayPeriodEnd] = useState('');
-  const [rows, setRows] = useState<Record<number, BulkEntryRow>>({});
+  const [rows, setRows] = useState<Record<number, { employeeId: number; regularHours: string; overtimeHours: string; tips: string; }>>({});
   
   const employees = useCompanyStore((state) => state.employees);
   const addRecord = usePayrollStore((state) => state.addRecord);
+  const selectedCompany = useCompanyStore((state) => state.selectedCompany);
 
-  const handleInputChange = (
-    employeeId: number,
-    field: keyof BulkEntryRow,
-    value: string
-  ) => {
+  const handleInputChange = (employeeId: number, field: string, value: string) => {
     setRows((prev) => ({
       ...prev,
       [employeeId]: {
@@ -34,69 +24,43 @@ export function BulkEntryForm() {
     }));
   };
 
-  const calculatePay = (
-    employee: typeof employees[0],
-    regularHours: number,
-    overtimeHours: number,
-    tips: number
-  ) => {
-    const regularPay =
-      employee.payrollType === 'hourly'
-        ? regularHours * employee.payRate
-        : employee.payRate / 26;
-    const overtimePay =
-      employee.payrollType === 'hourly'
-        ? overtimeHours * (employee.payRate * 1.5)
-        : 0;
-    const totalPay = regularPay + overtimePay + tips;
-
-    const taxRate = 0.2;
-    const tax = totalPay * taxRate;
-    const retirement = totalPay * employee.retirementRate;
-
-    return {
-      grossPay: totalPay,
-      netPay: totalPay - tax - retirement,
-      deductions: {
-        tax,
-        retirement,
-        other: 0,
-      },
-    };
-  };
-
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (!selectedCompany) return;
     if (!payPeriodStart || !payPeriodEnd) {
       alert('Please select pay period dates');
       return;
     }
 
-    Object.values(rows).forEach((row) => {
-      const employee = employees.find((e) => e.id === row.employeeId);
-      if (!employee) return;
+    const payload = Object.values(rows).map(row => ({
+      employee_id: row.employeeId,
+      pay_period_start: payPeriodStart,
+      pay_period_end: payPeriodEnd,
+      regular_hours: parseFloat(row.regularHours || '0'),
+      overtime_hours: parseFloat(row.overtimeHours || '0'),
+      reported_tips: parseFloat(row.tips || '0')
+    }));
 
-      const regularHours = parseFloat(row.regularHours || '0');
-      const overtimeHours = parseFloat(row.overtimeHours || '0');
-      const tips = parseFloat(row.tips || '0');
+    const response = await api.post(`/companies/${selectedCompany.id}/payroll_records/bulk`, { records: payload });
+    const newRecords = response.data; // Array of computed records
 
-      const { grossPay, netPay, deductions } = calculatePay(
-        employee,
-        regularHours,
-        overtimeHours,
-        tips
-      );
-
+    newRecords.forEach((newRecord: any) => {
       addRecord({
-        employeeId: row.employeeId,
-        payPeriodStart,
-        payPeriodEnd,
-        regularHours,
-        overtimeHours,
-        tips,
-        grossPay,
-        netPay,
-        deductions,
-        status: 'pending',
+        id: newRecord.id,
+        employeeId: newRecord.employee_id,
+        payPeriodStart: newRecord.pay_period_start,
+        payPeriodEnd: newRecord.pay_period_end,
+        regularHours: parseFloat(newRecord.regular_hours),
+        overtimeHours: parseFloat(newRecord.overtime_hours),
+        tips: parseFloat(newRecord.reported_tips),
+        grossPay: parseFloat(newRecord.gross_pay),
+        netPay: parseFloat(newRecord.net_pay),
+        deductions: {
+          tax: parseFloat(newRecord.withholding_tax),
+          retirement: parseFloat(newRecord.retirement_payment) + parseFloat(newRecord.roth_retirement_payment),
+          other: parseFloat(newRecord.total_deductions) - (parseFloat(newRecord.withholding_tax) + parseFloat(newRecord.retirement_payment) + parseFloat(newRecord.roth_retirement_payment)),
+        },
+        status: newRecord.status,
+        createdAt: newRecord.created_at,
       });
     });
 

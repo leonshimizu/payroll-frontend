@@ -5,21 +5,21 @@ import { Button } from '../ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
 
 export function LoginForm() {
-  const [email, setEmail] = useState('test@test.com'); // Pre-filled for testing
-  const [password, setPassword] = useState('Password'); // Pre-filled for testing
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    const success = login(email, password);
+    const success = await login(email, password);
     if (success) {
       navigate('/dashboard');
     } else {
-      setError('Invalid credentials. Use test@test.com / Password');
+      setError('Invalid credentials. Please try again.');
     }
   };
 
@@ -79,11 +79,6 @@ export function LoginForm() {
             Sign in
           </Button>
         </form>
-        <div className="mt-6 text-center">
-          <p className="text-sm text-slate-600">
-            Test credentials: test@test.com / Password
-          </p>
-        </div>
       </div>
     </div>
   );

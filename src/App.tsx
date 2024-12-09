@@ -1,4 +1,5 @@
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { Header } from './components/layout/header';
 import { LoginForm } from './components/auth/login-form';
 import { DashboardPage } from './pages/dashboard';
@@ -13,6 +14,12 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 export function App() {
+  const checkAuth = useAuthStore((state) => state.checkAuth);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
   return (
     <BrowserRouter>
       <Routes>

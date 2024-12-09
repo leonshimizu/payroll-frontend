@@ -1,12 +1,11 @@
 import { create } from 'zustand';
-
-export type ColumnType = 'number' | 'percentage' | 'text';
+import { fetchCustomColumns } from "@/lib/company-service";
 
 export interface CustomColumn {
   id: number;
   companyId: number;
   name: string;
-  type: ColumnType;
+  dataType: string;
   isDeduction: boolean;
   includeInPayroll: boolean;
   notSubjectToWithholding: boolean;
@@ -14,6 +13,7 @@ export interface CustomColumn {
 
 interface CustomColumnsState {
   columns: CustomColumn[];
+  loadCustomColumns: (companyId: number) => Promise<void>;
   addColumn: (column: Omit<CustomColumn, 'id'>) => void;
   updateColumn: (id: number, updates: Partial<CustomColumn>) => void;
   deleteColumn: (id: number) => void;
@@ -21,62 +21,49 @@ interface CustomColumnsState {
 }
 
 export const useCustomColumnsStore = create<CustomColumnsState>((set, get) => ({
-  columns: [
-    {
-      id: 1,
-      companyId: 1,
-      name: 'Bonus',
-      type: 'number',
-      isDeduction: false,
-      includeInPayroll: true,
-      notSubjectToWithholding: false,
-    },
-    {
-      id: 2,
-      companyId: 1,
-      name: 'Health Insurance',
-      type: 'number',
-      isDeduction: true,
-      includeInPayroll: true,
-      notSubjectToWithholding: true,
-    },
-    {
-      id: 3,
-      companyId: 1,
-      name: 'Parking',
-      type: 'number',
-      isDeduction: true,
-      includeInPayroll: true,
-      notSubjectToWithholding: true,
-    },
-    {
-      id: 4,
-      companyId: 2,
-      name: 'Commission',
-      type: 'percentage',
-      isDeduction: false,
-      includeInPayroll: true,
-      notSubjectToWithholding: false,
-    },
-  ],
-  addColumn: (column) => {
+  columns: [],
+
+  async loadCustomColumns(companyId) {
+    const data = await fetchCustomColumns(companyId);
+    const mapped = data.map((col: any) => ({
+      id: col.id,
+      companyId: col.company_id,
+      name: col.name,
+      dataType: col.data_type,
+      isDeduction: !!col.is_deduction,
+      includeInPayroll: !!col.include_in_payroll,
+      notSubjectToWithholding: !!col.not_subject_to_withholding,
+    }));
+
     set((state) => ({
-      columns: [...state.columns, { ...column, id: state.columns.length + 1 }],
+      columns: state.columns
+        .filter((col) => col.companyId !== companyId)
+        .concat(mapped),
     }));
   },
-  updateColumn: (id, updates) => {
+
+  addColumn(column) {
+    // Ideally call API POST and then reload columns.
+    set((state) => ({
+      columns: [...state.columns, { ...column, id: Date.now() }],
+    }));
+  },
+
+  updateColumn(id, updates) {
     set((state) => ({
       columns: state.columns.map((col) =>
         col.id === id ? { ...col, ...updates } : col
       ),
     }));
   },
-  deleteColumn: (id) => {
+
+  deleteColumn(id) {
     set((state) => ({
       columns: state.columns.filter((col) => col.id !== id),
     }));
   },
-  getCompanyColumns: (companyId) => {
+
+  getCompanyColumns(companyId) {
     return get().columns.filter((col) => col.companyId === companyId);
   },
 }));

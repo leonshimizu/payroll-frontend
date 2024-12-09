@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { fetchPayrollRecords } from "@/lib/payroll-service";
 
 export interface PayrollRecord {
   id: number;
@@ -21,87 +22,65 @@ export interface PayrollRecord {
 
 interface PayrollState {
   records: PayrollRecord[];
+  loadPayrollRecords: (companyId: number) => Promise<void>;
   addRecord: (record: Omit<PayrollRecord, 'id' | 'createdAt'>) => void;
   getEmployeeRecords: (employeeId: number) => PayrollRecord[];
   getRecordsByDateRange: (start: string, end: string) => PayrollRecord[];
 }
 
 export const usePayrollStore = create<PayrollState>((set, get) => ({
-  records: [
-    {
-      id: 1,
-      employeeId: 1,
-      payPeriodStart: '2024-03-01',
-      payPeriodEnd: '2024-03-15',
-      regularHours: 80,
-      overtimeHours: 5,
-      tips: 0,
-      grossPay: 3125,
-      netPay: 2343.75,
-      deductions: {
-        tax: 625,
-        retirement: 156.25,
-        other: 0,
-      },
-      status: 'paid',
-      createdAt: '2024-03-15T12:00:00Z',
-    },
-    {
-      id: 2,
-      employeeId: 2,
-      payPeriodStart: '2024-03-01',
-      payPeriodEnd: '2024-03-15',
-      regularHours: 75,
-      overtimeHours: 10,
-      tips: 200,
-      grossPay: 3325,
-      netPay: 2493.75,
-      deductions: {
-        tax: 665,
-        retirement: 166.25,
-        other: 0,
-      },
-      status: 'paid',
-      createdAt: '2024-03-15T12:00:00Z',
-    },
-    {
-      id: 3,
-      employeeId: 3,
-      payPeriodStart: '2024-03-01',
-      payPeriodEnd: '2024-03-15',
-      regularHours: 80,
-      overtimeHours: 0,
-      tips: 0,
-      grossPay: 2500,
-      netPay: 1875,
-      deductions: {
-        tax: 500,
-        retirement: 125,
-        other: 0,
-      },
-      status: 'paid',
-      createdAt: '2024-03-15T12:00:00Z',
-    },
-  ],
-  addRecord: (record) => {
+  records: [],
+
+  async loadPayrollRecords(companyId: number) {
+    const data = await fetchPayrollRecords(companyId);
+    const mapped = data.map((rec: any) => {
+      const totalDeductions = parseFloat(rec.total_deductions);
+      const tax = parseFloat(rec.withholding_tax);
+      const retirement = parseFloat(rec.retirement_payment) + parseFloat(rec.roth_retirement_payment);
+      const other = totalDeductions - tax - retirement;
+
+      return {
+        id: rec.id,
+        employeeId: rec.employee_id,
+        payPeriodStart: rec.pay_period_start,
+        payPeriodEnd: rec.pay_period_end,
+        regularHours: parseFloat(rec.hours_worked),
+        overtimeHours: parseFloat(rec.overtime_hours_worked),
+        tips: parseFloat(rec.reported_tips),
+        grossPay: parseFloat(rec.gross_pay),
+        netPay: parseFloat(rec.net_pay),
+        deductions: {
+          tax,
+          retirement,
+          other: isNaN(other) ? 0 : other,
+        },
+        status: rec.status,
+        createdAt: rec.created_at,
+      };
+    });
+    set({ records: mapped });
+  },
+
+  addRecord(record) {
     set((state) => ({
       records: [
         ...state.records,
         {
           ...record,
-          id: state.records.length + 1,
+          id: Date.now(),
           createdAt: new Date().toISOString(),
         },
       ],
     }));
   },
-  getEmployeeRecords: (employeeId) => {
+
+  getEmployeeRecords(employeeId) {
     return get().records.filter((record) => record.employeeId === employeeId);
   },
-  getRecordsByDateRange: (start, end) => {
+
+  getRecordsByDateRange(start, end) {
     return get().records.filter(
-      (record) =>
-        record.payPeriodStart >= start && record.payPeriodEnd <= end
+      (record) => record.payPeriodStart >= start && record.payPeriodEnd <= end
     );
   },
 }));

@@ -44,18 +44,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     const token = localStorage.getItem('token');
     if (token) {
       setAuthToken(token);
-      // Optionally, we can fetch current user info, but let's assume token decode or separate endpoint.
-      // For now, we can set isAuthenticated = true. If we need user data, we can call a /me endpoint.
-      // Example:
-      api.get('/me')
-        .then((res) => {
-          set({ user: res.data.user, isAuthenticated: true });
-        })
-        .catch(() => {
-          setAuthToken(null);
-          localStorage.removeItem('token');
-          set({ user: null, isAuthenticated: false });
-        });
     }
   },
 }));

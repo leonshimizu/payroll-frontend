@@ -1,3 +1,5 @@
+// src/pages/company.tsx
+
 import { useParams, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useCompanyStore } from '@/lib/store/company-store';
@@ -10,18 +12,20 @@ import { ChecksTab } from '@/components/companies/checks-tab';
 export function CompanyPage() {
   const { id } = useParams();
   const location = useLocation();
-  const [companies, selectCompany, selectedCompany] = useCompanyStore((state) => [
-    state.companies,
-    state.selectCompany,
-    state.selectedCompany,
-  ]);
+  const [companies, selectCompanyById, selectedCompany, departments, employees] =
+    useCompanyStore((state) => [
+      state.companies,
+      state.selectCompanyById,
+      state.selectedCompany,
+      state.departments,
+      state.employees,
+    ]);
 
   useEffect(() => {
-    const company = companies.find((c) => c.id === Number(id));
-    if (company) {
-      selectCompany(company);
+    if (id) {
+      selectCompanyById(Number(id));
     }
-  }, [id, companies, selectCompany]);
+  }, [id, selectCompanyById]);
 
   if (!selectedCompany) {
     return <div>Loading...</div>;
@@ -38,11 +42,9 @@ export function CompanyPage() {
   return (
     <div className="container mx-auto px-6 py-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">
-          {selectedCompany.name}
-        </h1>
+        <h1 className="text-2xl font-bold text-slate-900">{selectedCompany.name}</h1>
         <p className="mt-1 text-sm text-slate-600">
-          {selectedCompany.location} • {selectedCompany.employeeCount} employees
+          {selectedCompany.location} • {employees.length} employees
         </p>
       </div>
 

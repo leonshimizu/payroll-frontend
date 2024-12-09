@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { FileUpload } from './file-upload';
 import { usePayrollStore } from '@/lib/store/payroll-store';
 import { useCompanyStore } from '@/lib/store/company-store';
+import api from '@/lib/api';
 
 interface ImportResult {
   success: number;
@@ -13,84 +14,72 @@ interface ImportResult {
 export function ImportForm() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const selectedCompany = useCompanyStore((state) => state.selectedCompany);
   const addRecord = usePayrollStore((state) => state.addRecord);
   const employees = useCompanyStore((state) => state.employees);
 
   const handleUpload = async (file: File) => {
+    if (!selectedCompany) return;
     setIsProcessing(true);
-    const result: ImportResult = { success: 0, failed: 0, errors: [] };
+    const rawText = await file.text();
+    const rows = rawText.split('\n').slice(1); // skip header
+    const payload = [];
 
-    try {
-      const text = await file.text();
-      const rows = text.split('\n').slice(1); // Skip header row
-
-      for (const row of rows) {
-        try {
-          const [
-            employeeNumber,
-            payPeriodStart,
-            payPeriodEnd,
-            regularHours,
-            overtimeHours,
-            tips,
-          ] = row.split(',');
-
-          const employee = employees.find(
-            (emp) => emp.employeeNumber === employeeNumber.trim()
-          );
-
-          if (!employee) {
-            result.failed++;
-            result.errors.push(`Employee not found: ${employeeNumber}`);
-            continue;
-          }
-
-          // Calculate pay based on employee type and hours
-          const regularPay =
-            employee.payrollType === 'hourly'
-              ? Number(regularHours) * employee.payRate
-              : employee.payRate / 26;
-          const overtimePay =
-            employee.payrollType === 'hourly'
-              ? Number(overtimeHours) * (employee.payRate * 1.5)
-              : 0;
-          const totalPay = regularPay + overtimePay + Number(tips);
-
-          // Simple tax calculation (this should be more sophisticated in production)
-          const taxRate = 0.2;
-          const tax = totalPay * taxRate;
-          const retirement = totalPay * employee.retirementRate;
-
-          addRecord({
-            employeeId: employee.id,
-            payPeriodStart: payPeriodStart.trim(),
-            payPeriodEnd: payPeriodEnd.trim(),
-            regularHours: Number(regularHours),
-            overtimeHours: Number(overtimeHours),
-            tips: Number(tips),
-            grossPay: totalPay,
-            netPay: totalPay - tax - retirement,
-            deductions: {
-              tax,
-              retirement,
-              other: 0,
-            },
-            status: 'pending',
-          });
-
-          result.success++;
-        } catch (error) {
-          result.failed++;
-          result.errors.push(`Invalid row format: ${row}`);
-        }
-      }
-    } catch (error) {
-      result.failed++;
-      result.errors.push('Failed to read file');
+    for (const row of rows) {
+      const [employeeNumber, payPeriodStart, payPeriodEnd, regularHours, overtimeHours, tips] = row.split(',');
+      const emp = employees.find((emp) => emp.employeeNumber === (employeeNumber || '').trim());
+      if (!emp) continue;
+      payload.push({
+        employee_id: emp.id,
+        pay_period_start: payPeriodStart.trim(),
+        pay_period_end: payPeriodEnd.trim(),
+        regular_hours: parseFloat(regularHours),
+        overtime_hours: parseFloat(overtimeHours),
+        reported_tips: parseFloat(tips),
+      });
     }
 
-    setResult(result);
-    setIsProcessing(false);
+    try {
+      const response = await api.post(`/companies/${selectedCompany.id}/payroll_records/bulk`, { records: payload });
+      const newRecords = response.data;
+
+      let success = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      newRecords.forEach((r: any) => {
+        if (r.error) {
+          failed++;
+          errors.push(r.error);
+        } else {
+          success++;
+          addRecord({
+            id: r.id,
+            employeeId: r.employee_id,
+            payPeriodStart: r.pay_period_start,
+            payPeriodEnd: r.pay_period_end,
+            regularHours: parseFloat(r.regular_hours),
+            overtimeHours: parseFloat(r.overtime_hours),
+            tips: parseFloat(r.reported_tips),
+            grossPay: parseFloat(r.gross_pay),
+            netPay: parseFloat(r.net_pay),
+            deductions: {
+              tax: parseFloat(r.withholding_tax),
+              retirement: parseFloat(r.retirement_payment) + parseFloat(r.roth_retirement_payment),
+              other: parseFloat(r.total_deductions) - (parseFloat(r.withholding_tax) + parseFloat(r.retirement_payment) + parseFloat(r.roth_retirement_payment)),
+            },
+            status: r.status,
+            createdAt: r.created_at,
+          });
+        }
+      });
+
+      setResult({ success, failed, errors });
+    } catch (error: any) {
+      setResult({ success: 0, failed: payload.length, errors: ['Failed to process file'] });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const downloadTemplate = () => {

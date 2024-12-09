@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -13,22 +13,38 @@ import { exportPayrollToCSV } from '@/lib/utils/export';
 import { Pencil } from 'lucide-react';
 
 export function EmployeePage() {
-  const { id } = useParams();
+  const { company_id, id } = useParams();
   const [isCreatingRecord, setIsCreatingRecord] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  const employee = useCompanyStore((state) =>
-    state.employees.find((e) => e.id === Number(id))
-  );
-  const department = useCompanyStore((state) =>
-    state.departments.find((d) => d.id === employee?.departmentId)
-  );
+  const selectCompanyById = useCompanyStore((state) => state.selectCompanyById);
+  const selectedCompany = useCompanyStore((state) => state.selectedCompany);
+  const employees = useCompanyStore((state) => state.employees);
+  const departments = useCompanyStore((state) => state.departments);
   const payrollRecords = usePayrollStore((state) =>
-    state.getEmployeeRecords(Number(id))
+    id ? state.getEmployeeRecords(Number(id)) : []
   );
 
-  if (!employee) return <div>Employee not found</div>;
+  // Ensure company data is loaded before looking for employee
+  useEffect(() => {
+    if (company_id) {
+      selectCompanyById(Number(company_id));
+    }
+  }, [company_id, selectCompanyById]);
+
+  // If data isn't loaded yet (selectedCompany is null), show loading state
+  if (!selectedCompany) {
+    return <div>Loading...</div>;
+  }
+
+  const employee = employees.find((e) => e.id === Number(id));
+
+  if (!employee) {
+    return <div>Employee not found</div>;
+  }
+
+  const department = departments.find((d) => d.id === employee.departmentId);
 
   const selectedPayrollRecord = selectedRecord
     ? payrollRecords.find((r) => r.id === selectedRecord)
@@ -37,7 +53,7 @@ export function EmployeePage() {
   return (
     <div className="container mx-auto px-6 py-8">
       <BackButton />
-      
+
       <Breadcrumb
         items={[
           { label: 'Dashboard', href: '/dashboard' },
@@ -83,7 +99,8 @@ export function EmployeePage() {
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Pay Rate</dt>
                   <dd className="mt-1">
-                    ${employee.payRate.toLocaleString()}{employee.payrollType === 'hourly' ? '/hr' : '/yr'}
+                    ${employee.payRate.toLocaleString()}
+                    {employee.payrollType === 'hourly' ? '/hr' : '/yr'}
                   </dd>
                 </div>
                 <div>
@@ -199,7 +216,7 @@ export function EmployeePage() {
         employeeId={employee.id}
       />
 
-      {selectedPayrollRecord && (
+      {selectedPayrollRecord && employee && (
         <RecordDetailsDialog
           open={!!selectedRecord}
           onClose={() => setSelectedRecord(null)}

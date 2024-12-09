@@ -20,6 +20,7 @@ export function EmployeeList({ departmentId }: EmployeeListProps) {
   const [isAddingEmployee, setIsAddingEmployee] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const employees = useCompanyStore((state) => state.getEmployees(departmentId));
+  const selectedCompany = useCompanyStore((state) => state.selectedCompany);
 
   return (
     <div>
@@ -96,7 +97,8 @@ export function EmployeeList({ departmentId }: EmployeeListProps) {
                       className="mr-2"
                       asChild
                     >
-                      <Link to={`/employees/${employee.id}`}>
+                      {/* Use selectedCompany.id to build the link */}
+                      <Link to={`/companies/${selectedCompany?.id}/employees/${employee.id}`}>
                         <Eye className="mr-2 h-4 w-4" />
                         View
                       </Link>

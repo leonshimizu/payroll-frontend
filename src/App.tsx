@@ -34,7 +34,8 @@ export function App() {
                   <Routes>
                     <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/companies/:id/*" element={<CompanyPage />} />
-                    <Route path="/employees/:id" element={<EmployeePage />} />
+                    {/* Updated route for EmployeePage: include company_id */}
+                    <Route path="/companies/:company_id/employees/:id" element={<EmployeePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Routes>
                 </main>
